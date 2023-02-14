@@ -1,17 +1,33 @@
 use alienfile;
 
-# replace this with your own system probe.
-# See Alien::Build::Plugin::Probe and
-# Alien::Build::Plugin::PkgConfig for common
-# probe plugins.
-probe sub { 'share' };
+plugin 'Probe::CommandLine' => (
+  command => 'node',
+  args    => [ '--version' ],
+  match   => qr/^v([0-9\.]+)$/,
+  version => qr/^v([0-9\.]+)$/,
+);
+
 
 share {
-  start_url 'https://nodejs.org/dist/v18.14.0';
+  start_url 'https://nodejs.org/en/download/';
+  my $node_qr_prefix = qr/node-v([0-9\.]+)/;
+  my $src_qr = qr/$node_qr_prefix\.tar\.gz/;
+  my %os_arch_mapping = (
+    "MSWin32:x86" => { name => 'win-x86', format => 'zip' },
+    "MSWin32:x86_64" => { name => 'win-x64', format => 'zip' },
+    "darwin:x86_64" => { name => 'darwin-x64', format => 'tar.gz' },
+    "darwin:aarch64" => { name => 'darwin-arm64', format => 'tar.gz' },
+    "linux:x86_64" => { name => 'linux-x64', format => 'tar.xz' },
+    #"linux:" => { name => 'linux-armv7l', format => 'tar.xz' },
+    "linux:aarch64" => { name => 'linux-arm64', format => 'tar.xz' },
+  );
+  my $os_arch = join ":", ( $^O, meta->prop->{platform}{cpu}{arch}{name} );
+
+  die "No binary available for platform $os_arch" unless exists $os_arch_mapping{$os_arch};
   plugin Download => (
-    filter  => qr/^node.*tar\.gz$/,
+    filter  => qr/${node_qr_prefix}-\Q@{[ $os_arch_mapping{$os_arch}{name} ]}\E\.\Q@{[ $os_arch_mapping{$os_arch}{format} ]}\E/,
     version => qr/([0-9\.]+)/,
   );
-  plugin Extract => 'tar.gz';
-  plugin 'Gather::IsolateDynamic';
+  plugin Extract => $os_arch_mapping{$os_arch}{format};
+  plugin 'Build::Copy';
 }
